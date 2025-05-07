@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from cmk.agent_based.v2 import AgentSection, CheckPlugin, Service, Result, State, Metric, check_levels
+from cmk.agent_based.v2 import render
 
 import itertools
 import json
@@ -29,20 +30,20 @@ def get_cluster_version(item,section):
 
 def get_cluster_iops(item,section):
     value = section["clusters"][item]["metrics"]["iops"]
-    yield Metric("reads", value["reads"])
-    yield Metric("writes", value["writes"])
+    yield Metric("iops_reads", value["reads"])
+    yield Metric("iops_writes", value["writes"])
     yield Result(state=State.OK, summary=f"Read {value["reads"]} / Write {value["writes"]}")
 
 def get_cluster_latency(item,section):
     value =  section["clusters"][item]["metrics"]["latency"]
-    yield Metric("reads", value["reads"])
-    yield Metric("writes", value["writes"])
+    yield Metric("latency_reads", value["reads"])
+    yield Metric("latency_writes", value["writes"])
     yield Result(state=State.OK, summary=f"Read {value["reads"]} / Write {value["writes"]}")
     
 def get_cluster_throughput(item,section):
     value = section["clusters"][item]["metrics"]["throughput"]
-    yield Metric("reads", value["reads"])
-    yield Metric("writes", value["writes"])
+    yield Metric("throughput_reads", value["reads"])
+    yield Metric("throughput_writes", value["writes"])
     yield Result(state=State.OK, summary=f"Read {value["reads"]} / Write {value["writes"]}")
 
 ### HOST ###
@@ -56,20 +57,20 @@ def get_host_virtual_controller_name(item,section):
 
 def get_hosts_iops(item,section):
     value = section["hosts"][item]["metrics"]["iops"]
-    yield Metric("reads", value["reads"])
-    yield Metric("writes", value["writes"])
+    yield Metric("iops_reads", value["reads"])
+    yield Metric("iops_writes", value["writes"])
     yield Result(state=State.OK, summary=f"Read {value["reads"]} / Write {value["writes"]}")
 
 def get_hosts_latency(item,section):
     value =  section["hosts"][item]["metrics"]["latency"]
-    yield Metric("reads", value["reads"])
-    yield Metric("writes", value["writes"])
+    yield Metric("latency_reads", value["reads"])
+    yield Metric("latency_writes", value["writes"])
     yield Result(state=State.OK, summary=f"Read {value["reads"]} / Write {value["writes"]}")
     
 def get_hosts_throughput(item,section):
     value = section["hosts"][item]["metrics"]["throughput"]
-    yield Metric("reads", value["reads"])
-    yield Metric("writes", value["writes"])
+    yield Metric("throughput_reads", value["reads"])
+    yield Metric("throughput_writes", value["writes"])
     yield Result(state=State.OK, summary=f"Read {value["reads"]} / Write {value["writes"]}")
 
 
