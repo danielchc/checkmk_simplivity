@@ -1,0 +1,277 @@
+#!/usr/bin/env python3
+
+import argparse
+import urllib3
+import json
+import base64
+
+# Disable SSL warnings
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+http = urllib3.PoolManager(cert_reqs='CERT_NONE') 
+
+
+class Simplivity:
+    """
+    A class to interact with the Simplivity API.
+    """
+
+    def __init__(self, hostname, username, password):
+        self.hostname = hostname
+        self.username = username
+        self.password = password
+        self.access_token = self.authenticate()
+
+    def authenticate(self):
+        """
+        Function to retrieve a bearer token from the Simplivity API.
+        """
+        # URL for the API endpoint
+        # Note: Replace with the actual URL of your Simplivity API
+        url = f"https://{self.hostname}/api/oauth/token"
+
+        # Basic authentication with username 'simplivity' and no password
+        auth_str = 'simplivity:'
+        auth_bytes = auth_str.encode('utf-8')
+        auth_b64 = base64.b64encode(auth_bytes).decode('utf-8')
+        headers = {
+            'Authorization': f'Basic {auth_b64}',
+            'Content-Type': 'application/x-www-form-urlencoded'
+        }
+
+        # Data payload
+        data = {
+            'grant_type': 'password',
+            'username': self.username,
+            'password': self.password
+        }
+
+        # Make the POST request, ignoring SSL certificate warnings (equivalent to -k in curl)
+
+        encoded_data = urllib3.request.urlencode(data)
+
+        response = http.request(
+            'POST',
+            url,
+            body=encoded_data,
+            headers=headers
+        )
+        response_json = json.loads(response.data.decode('utf-8'))
+
+        bearer_token = response_json.get('access_token')
+
+        # Check if the token was retrieved successfully
+        if (response.status != 200) or (not bearer_token):
+            print("Failed to retrieve bearer token. Response:", response_json)
+            exit(1)
+
+        return bearer_token
+    
+    def get_omnistack_clusters(self):
+
+        api_url = f"https://{self.hostname}/api/omnistack_clusters"
+        headers = {
+            'Authorization': f'Bearer {self.access_token}',
+            'Accept': 'application/json'
+        }
+
+        params = {
+            'show_optional_fields': 'false',
+            'limit': 500,
+            'offset': 0,
+            'case': 'sensitive'
+        }
+
+
+        response = http.request(
+            'GET',
+            api_url,
+            headers=headers,
+            fields=params
+        )
+
+        api_response = json.loads(response.data.decode('utf-8'))
+
+        return api_response
+    
+    def get_hosts(self):
+
+        api_url = f"https://{self.hostname}/api/hosts"
+        headers = {
+            'Authorization': f'Bearer {self.access_token}',
+            'Accept': 'application/json'
+        }
+
+        response = http.request(
+            'GET',
+            api_url,
+            headers=headers
+        )
+
+        api_response = json.loads(response.data.decode('utf-8'))
+
+        return api_response
+
+
+    def get_host_metrics(self, host_id, range=43200, resolution="MINUTE"):
+
+        api_url = f"https://{self.hostname}/api/hosts/{host_id}/metrics"
+        headers = {
+            'Authorization': f'Bearer {self.access_token}',
+            'Accept': 'application/json'
+        }
+
+        params = {
+            "time_offset":0,
+            "range":range,
+            "resolution":resolution,
+        }
+        
+
+        response = http.request(
+            'GET',
+            api_url,
+            headers=headers,
+            fields=params
+        )
+
+        api_response = json.loads(response.data.decode('utf-8'))
+
+        return api_response 
+    
+    def get_host_capacity(self, host_id, range=43200, resolution="MINUTE"):
+
+        api_url = f"https://{self.hostname}/api/hosts/{host_id}/capacity"
+        headers = {
+            'Authorization': f'Bearer {self.access_token}',
+            'Accept': 'application/json'
+        }
+
+        params = {
+            "time_offset":0,
+            "range":range,
+            "resolution":resolution,
+        }
+        
+        response = http.request(
+            'GET',
+            api_url,
+            headers=headers,
+            fields=params
+        )
+
+        api_response = json.loads(response.data.decode('utf-8'))
+
+        return api_response
+
+    def get_omnistack_metrics(self, cluster_id, range=43200, resolution="MINUTE"):
+
+        api_url = f"https://{self.hostname}/api/omnistack_clusters/{cluster_id}/metrics"
+        headers = {
+            'Authorization': f'Bearer {self.access_token}',
+            'Accept': 'application/json'
+        }
+
+        params = {
+            "time_offset":0,
+            "range":range,
+            "resolution":resolution,
+        }
+        
+        response = http.request(
+            'GET',
+            api_url,
+            headers=headers,
+            fields=params
+        )
+
+        api_response = json.loads(response.data.decode('utf-8'))
+
+        return api_response
+
+
+parser = argparse.ArgumentParser("agent_simplivity")
+
+parser.add_argument(
+    "--user",
+    help="Specify username.",
+    type=str)
+parser.add_argument(
+    "--password",
+    help="Specify password.",
+    type=str)
+parser.add_argument(
+    "--hostname",
+    help="Specify password.",
+    type=str)
+args = parser.parse_args()
+
+# Get the hostname from the first positional argument
+hostname = args
+
+simplivity = Simplivity(args.hostname, args.user, args.password)
+
+# Get the Omnistack clusters
+omnistack_clusters = simplivity.get_omnistack_clusters()
+
+
+out_clusters={}
+
+for cluster in omnistack_clusters['omnistack_clusters']:
+    # Get first cluster ID
+    cluster_id = cluster['id']
+    name = cluster['name']
+    version = cluster['version']
+
+    metrics = simplivity.get_omnistack_metrics(cluster_id, range=120)["metrics"]
+    metrics_out={}
+    for met in metrics:
+        metrics_out[met["name"]] = met["data_points"][-1]
+
+    out_clusters[name] ={
+        "name": name,
+        "cluster_id": cluster_id,
+        "version": version,
+        "metrics": metrics_out
+    }
+
+
+
+out_hosts={}
+
+for hosts in  simplivity.get_hosts()["hosts"]:
+    name = hosts["name"]
+    host_id = hosts["id"]
+    virtual_controller_name= hosts["virtual_controller_name"]
+    
+    metrics = simplivity.get_omnistack_metrics(cluster_id, range=120)["metrics"]
+    metrics_out={}
+    for met in metrics:
+        metrics_out[met["name"]] = met["data_points"][-1]
+
+    capacity=simplivity.get_host_capacity(host_id,range=120)["metrics"]
+    capacity_out={}
+    for cap in capacity:
+        capacity_out[cap["name"]] = cap["data_points"][-1]
+
+
+
+    out_hosts[name] = {
+        "name": name,
+        "host_id": host_id,
+        "virtual_controller_name": virtual_controller_name,
+        "metrics": metrics_out,
+        "capacity": capacity_out
+    }
+
+
+
+print('<<<simplivity:sep(0)>>>')
+print(json.dumps(
+        {
+            "clusters":out_clusters,
+            "hosts": out_hosts
+        },
+        indent=4
+    )
+)
