@@ -1,17 +1,32 @@
 #!/usr/bin/env python3
 
 from cmk.rulesets.v1.rule_specs import SpecialAgent, Topic, Help, Title
-from cmk.rulesets.v1.form_specs import Dictionary, DictElement, String, Password, migrate_to_password, DefaultValue
-from cmk.rulesets.v1.form_specs import BooleanChoice, DefaultValue, Float, LevelDirection, SimpleLevels
+from cmk.rulesets.v1.form_specs import (
+    Dictionary,
+    DictElement,
+    String,
+    Password,
+    migrate_to_password,
+    DefaultValue,
+)
+from cmk.rulesets.v1.form_specs import (
+    BooleanChoice,
+    DefaultValue,
+    Float,
+    LevelDirection,
+    SimpleLevels,
+)
 from cmk.rulesets.v1.rule_specs import CheckParameters, HostCondition, Topic
 
 
 def _formspec():
     return Dictionary(
         title=Title("HPE Simplivity"),
-        help_text=Help("This rule is used to showcase a special agent with configuration."),
+        help_text=Help(
+            "This rule is used to showcase a special agent with configuration."
+        ),
         elements={
-             "user": DictElement(
+            "user": DictElement(
                 required=True,
                 parameter_form=String(
                     title=Title("User for login"),
@@ -25,30 +40,58 @@ def _formspec():
                     migrate=migrate_to_password,
                 ),
             ),
-        }
+        },
     )
+
 
 def _parameter_form():
     return Dictionary(
-        elements = {
+        elements={
             "latency_reads": DictElement(
-                parameter_form = SimpleLevels(
-                    title = Title("Latency Reads Threshold μs"),
-                    form_spec_template = Float(),
-                    level_direction = LevelDirection.UPPER,
-                    prefill_fixed_levels = DefaultValue(value=(20000, 25000)),
+                parameter_form=SimpleLevels(
+                    title=Title("Latency Reads Threshold μs"),
+                    form_spec_template=Float(),
+                    level_direction=LevelDirection.UPPER,
+                    prefill_fixed_levels=DefaultValue(value=(20000, 25000)),
                 ),
-                required = True,
+                required=True,
             ),
             "latency_writes": DictElement(
-                parameter_form = SimpleLevels(
-                    title = Title("Latency Writes Threshold μs"),
-                    form_spec_template = Float(),
-                    level_direction = LevelDirection.UPPER,
-                    prefill_fixed_levels = DefaultValue(value=(25000, 30000)),
+                parameter_form=SimpleLevels(
+                    title=Title("Latency Writes Threshold μs"),
+                    form_spec_template=Float(),
+                    level_direction=LevelDirection.UPPER,
+                    prefill_fixed_levels=DefaultValue(value=(25000, 30000)),
                 ),
-                required = True,
-            ),            
+                required=True,
+            ),
+            "safe_vms_percentage": DictElement(
+                parameter_form=SimpleLevels(
+                    title=Title("Safe VMs Percentage Threshold %"),
+                    form_spec_template=Float(),
+                    level_direction=LevelDirection.LOWER,
+                    prefill_fixed_levels=DefaultValue(value=(80.0, 70.0)),
+                ),
+                required=True,
+            ),
+            "cluster_used_percentage": DictElement(
+                parameter_form=SimpleLevels(
+                    title=Title("Cluster used Capacity Threshold %"),
+                    form_spec_template=Float(),
+                    level_direction=LevelDirection.UPPER,
+                    prefill_fixed_levels=DefaultValue(value=(80.0, 90.0)),
+                ),
+                required=True,
+            ),
+            "host_used_percentage": DictElement(
+                parameter_form=SimpleLevels(
+                    title=Title("Host used Capacity Threshold %"),
+                    form_spec_template=Float(),
+                    level_direction=LevelDirection.UPPER,
+                    prefill_fixed_levels=DefaultValue(value=(80.0, 90.0)),
+                ),
+                required=True,
+            ),
         }
     )
 
@@ -57,13 +100,13 @@ rule_spec_simplivity = SpecialAgent(
     topic=Topic.ENVIRONMENTAL,
     name="simplivity",
     title=Title("HPE Simplivity"),
-    parameter_form=_formspec
+    parameter_form=_formspec,
 )
 
 rule_spec_thresholds = CheckParameters(
-    name = "simplivity_thresholds",
-    title = Title("HPE Simplivity Thresholds"),
-    topic = Topic.GENERAL,
-    parameter_form = _parameter_form,
-    condition = HostCondition(),
+    name="simplivity_thresholds",
+    title=Title("HPE Simplivity Thresholds"),
+    topic=Topic.GENERAL,
+    parameter_form=_parameter_form,
+    condition=HostCondition(),
 )

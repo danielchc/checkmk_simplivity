@@ -1,80 +1,53 @@
 # HPE SimpliVity Checkmk Plugin
 
-This Checkmk plugin provides monitoring for **HPE SimpliVity clusters and hosts**.
+Monitor HPE SimpliVity clusters (VMware) and hosts from Checkmk using the SimpliVity REST API.
 
-## Features
+## Requirements
 
-- Cluster-level and host-level performance metrics
-- Latency and throughput monitoring
-- Capacity reporting
-- Basic health validation
+- Checkmk 2.3.0 or newer
+- Network access from the Checkmk site to the SimpliVity API over HTTPS
+- A SimpliVity account with permission to read cluster, host, VM, capacity, and hardware information
 
-### **General**
+## Installation and setup
 
-## 🧩 Cluster Data
+Install the plugin as a Checkmk extension package, or place its `agent_based`, `graphing`, `libexec`, `rulesets`, and `server_side_calls` directories under the site-local plugin directory:
 
-Each discovered cluster includes:
+```text
+~/local/lib/python3/cmk_addons/plugins/simplivity/
+```
 
-### Cluster ID
+Activate the changes in Checkmk, then create a **HPE Simplivity** special agent rule and assign it to a host. The assigned host's name is used as the SimpliVity API hostname. Enter the API username and password in the rule, then run service discovery on that host.
 
-Unique identifier of the cluster.
+## Monitored data
 
-### Cluster Version
+### Clusters
 
-SimpliVity software/firmware version.
+- Cluster ID and SimpliVity version
+- Read and write IOPS, latency, and throughput
+- Physical capacity, including used and free space
+- VM health counts for safe, syncing, degraded, and unknown VMs
 
-### Cluster IOPS
+### Hosts
 
-- **Reads** – Read operations per second
-- **Writes** – Write operations per second
+- Host ID, state, and virtual controller name
+- Read and write IOPS, latency, and throughput
+- Capacity metrics, including used and free space
+- Host, RAID, and disk hardware health
 
-### Cluster Latency
+Latency and capacity checks report threshold states. Read and write performance metrics are also available for Checkmk graphs.
 
-- **Read latency** (with WARN/CRIT thresholds)
-- **Write latency**
+## Default thresholds
 
-Latency values are automatically rendered as human-readable time spans.
+| Check                 |   Warning |  Critical |
+| --------------------- | --------: | --------: |
+| Read latency          | 20,000 µs | 25,000 µs |
+| Write latency         | 25,000 µs | 30,000 µs |
+| Cluster used capacity |       80% |       90% |
+| Host used capacity    |       80% |       90% |
+| Safe VMs              | Below 80% | Below 70% |
 
-### Cluster Throughput
+Latency thresholds are upper limits. Safe VM percentage uses lower limits, so falling below the warning or critical percentage raises the corresponding state.
 
-- **Read throughput** – Data read per second
-- **Write throughput** – Data written per second
+## TLS note
 
----
-
-## 🧩 Host Data
-
-Each discovered host shows:
-
-### **Host ID**
-
-Unique host ID in the SimpliVity environment.
-
-### **Host State**
-
-- `ALIVE` → OK
-- Anything else → WARN
-
-### **OVC Controller Name**
-
-The virtual controller assigned to the host.
-
-### **Host IOPS**
-
-Read and write IOPS.
-
-### **Host Latency**
-
-Read and write latency (threshold-based).
-
-### **Host Throughput**
-
-Read and write throughput as bandwidth metrics.
-
-### **Host Capacity**
-
-Dynamic storage metrics such as:
-
-- total
-- used
-- free
+The special agent currently disables TLS certificate verification for API requests. Connections are encrypted, but the server certificate is not validated. Use this plugin only on trusted networks until certificate verification is implemented.

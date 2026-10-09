@@ -5,6 +5,7 @@ import urllib3
 import urllib
 import json
 import base64
+from collections import Counter
 
 # Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -22,6 +23,10 @@ class Simplivity:
         self.username = username
         self.password = password
         self.access_token = self.authenticate()
+        self.headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Accept": "application/json",
+        }
 
     def authenticate(self):
         """
@@ -66,10 +71,22 @@ class Simplivity:
     def get_omnistack_clusters(self):
 
         api_url = f"https://{self.hostname}/api/omnistack_clusters"
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "Accept": "application/json",
+        params = {
+            "show_optional_fields": "false",
+            "limit": 500,
+            "offset": 0,
+            "case": "sensitive",
         }
+
+        response = http.request("GET", api_url, headers=self.headers, fields=params)
+
+        api_response = json.loads(response.data.decode("utf-8"))
+
+        return api_response
+
+    def get_omnistack_cluster(self, cluster_id):
+
+        api_url = f"https://{self.hostname}/api/omnistack_clusters/{cluster_id}"
 
         params = {
             "show_optional_fields": "false",
@@ -78,21 +95,16 @@ class Simplivity:
             "case": "sensitive",
         }
 
-        response = http.request("GET", api_url, headers=headers, fields=params)
+        response = http.request("GET", api_url, headers=self.headers, fields=params)
 
         api_response = json.loads(response.data.decode("utf-8"))
 
-        return api_response
+        return api_response.get("omnistack_cluster")
 
     def get_hosts(self):
 
         api_url = f"https://{self.hostname}/api/hosts"
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "Accept": "application/json",
-        }
-
-        response = http.request("GET", api_url, headers=headers)
+        response = http.request("GET", api_url, headers=self.headers)
 
         api_response = json.loads(response.data.decode("utf-8"))
 
@@ -101,10 +113,6 @@ class Simplivity:
     def get_host_metrics(self, host_id, range=43200, resolution="MINUTE"):
 
         api_url = f"https://{self.hostname}/api/hosts/{host_id}/metrics"
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "Accept": "application/json",
-        }
 
         params = {
             "time_offset": 0,
@@ -112,7 +120,7 @@ class Simplivity:
             "resolution": resolution,
         }
 
-        response = http.request("GET", api_url, headers=headers, fields=params)
+        response = http.request("GET", api_url, headers=self.headers, fields=params)
 
         api_response = json.loads(response.data.decode("utf-8"))
 
@@ -121,10 +129,6 @@ class Simplivity:
     def get_host_capacity(self, host_id, range=43200, resolution="MINUTE"):
 
         api_url = f"https://{self.hostname}/api/hosts/{host_id}/capacity"
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "Accept": "application/json",
-        }
 
         params = {
             "time_offset": 0,
@@ -132,7 +136,17 @@ class Simplivity:
             "resolution": resolution,
         }
 
-        response = http.request("GET", api_url, headers=headers, fields=params)
+        response = http.request("GET", api_url, headers=self.headers, fields=params)
+
+        api_response = json.loads(response.data.decode("utf-8"))
+
+        return api_response
+
+    def get_host_hardware_status(self, host_id):
+
+        api_url = f"https://{self.hostname}/api/hosts/{host_id}/hardware"
+
+        response = http.request("GET", api_url, headers=self.headers)
 
         api_response = json.loads(response.data.decode("utf-8"))
 
@@ -141,10 +155,6 @@ class Simplivity:
     def get_omnistack_metrics(self, cluster_id, range=43200, resolution="MINUTE"):
 
         api_url = f"https://{self.hostname}/api/omnistack_clusters/{cluster_id}/metrics"
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "Accept": "application/json",
-        }
 
         params = {
             "time_offset": 0,
@@ -152,22 +162,45 @@ class Simplivity:
             "resolution": resolution,
         }
 
-        response = http.request("GET", api_url, headers=headers, fields=params)
+        response = http.request("GET", api_url, headers=self.headers, fields=params)
 
         api_response = json.loads(response.data.decode("utf-8"))
 
         return api_response
+
+    def get_cluster_vms_status(self, cluster_id, limit=500):
+        offset = 0
+        vms = []
+
+        while True:
+            api_url = f"https://{self.hostname}/api/virtual_machines"
+            params = {
+                "omnistack_cluster_id": cluster_id,
+                "show_optional_fields": "true",
+                "fields": "name,ha_status",
+                "limit": str(limit),
+                "offset": str(offset),
+            }
+            response = http.request("GET", api_url, headers=self.headers, fields=params)
+            api_response = json.loads(response.data.decode("utf-8"))
+            page_vms = api_response.get("virtual_machines", [])
+            vms.extend(page_vms)
+
+            if len(page_vms) < limit:
+                break
+
+            offset += limit
+
+        return vms
 
 
 parser = argparse.ArgumentParser("agent_simplivity")
 
 parser.add_argument("--user", help="Specify username.", type=str)
 parser.add_argument("--password", help="Specify password.", type=str)
-parser.add_argument("--hostname", help="Specify password.", type=str)
+parser.add_argument("--hostname", help="Specify hostname.", type=str)
 args = parser.parse_args()
 
-# Get the hostname from the first positional argument
-hostname = args
 
 simplivity = Simplivity(args.hostname, args.user, args.password)
 
@@ -177,41 +210,115 @@ omnistack_clusters = simplivity.get_omnistack_clusters()
 out_clusters = {}
 
 for cluster in omnistack_clusters["omnistack_clusters"]:
-    # Get first cluster ID
-    cluster_id = cluster["id"]
-    name = cluster["name"]
-    version = cluster["version"]
+    cluster_id = cluster.get("id")
+    name = cluster.get("name")
+    version = cluster.get("version")
+
+    details = simplivity.get_omnistack_cluster(cluster_id)
 
     metrics = simplivity.get_omnistack_metrics(cluster_id, range=120)["metrics"]
     metrics_out = {}
     for met in metrics:
-        metrics_out[met["name"]] = met["data_points"][-1]
+        data_points = met.get("data_points", [])
+        metrics_out[met["name"]] = data_points[-1] if data_points else 0
+
+    vms = simplivity.get_cluster_vms_status(cluster_id, limit=5000)
+    counts = Counter(vm["ha_status"] for vm in vms)
+
+    vm_status = {
+        "degraded": counts["DEGRADED"],
+        "safe": counts["SAFE"],
+        "syncing": counts["SYNCING"],
+        "unknown": counts["UNKNOWN"],
+        "total": sum(counts.values()),
+    }
 
     out_clusters[name] = {
         "name": name,
         "cluster_id": cluster_id,
         "version": version,
         "metrics": metrics_out,
+        "vm_status": vm_status,
+        "capacity": {
+            # Ratios
+            "compression_ratio": (
+                float(details.get("compression_ratio", "").split(":")[0].strip())
+                if details.get("compression_ratio")
+                else -1
+            ),
+            "efficiency_ratio": (
+                float(details.get("efficiency_ratio", "").split(":")[0].strip())
+                if details.get("efficiency_ratio")
+                else -1
+            ),
+            "deduplication_ratio": (
+                float(details.get("deduplication_ratio", "").split(":")[0].strip())
+                if details.get("deduplication_ratio")
+                else -1
+            ),
+            # Logical Space -> First Donut
+            "local_backup_capacity": details.get(
+                "local_backup_capacity"
+            ),  # Local backup
+            "remote_backup_capacity": details.get(
+                "remote_backup_capacity"
+            ),  # Backups remote
+            "stored_virtual_machine_data": details.get(
+                "stored_virtual_machine_data"
+            ),  # VMs
+            "used_logical_capacity": details.get("used_logical_capacity"),  # Total
+            # Physical Space -> Second Donut
+            "used_capacity": details.get("used_capacity"),
+            "free_space": details.get("free_space"),  # Free Space
+            "allocated_capacity": details.get("allocated_capacity"),  # Total
+            # ???
+            "capacity_savings": details.get("capacity_savings"),
+            "stored_uncompressed_data": details.get("stored_uncompressed_data"),
+            "stored_compressed_data": details.get("stored_compressed_data"),
+        },
     }
 
 out_hosts = {}
 
-for hosts in simplivity.get_hosts()["hosts"]:
-    name = hosts["name"]
-    host_id = hosts["id"]
-    host_state = hosts["state"]
+for hosts in simplivity.get_hosts().get("hosts", []):
+    name = hosts.get("name")
+    host_id = hosts.get("id")
+    host_state = hosts.get("state")
 
-    virtual_controller_name = hosts["virtual_controller_name"]
+    virtual_controller_name = hosts.get("virtual_controller_name")
 
     metrics = simplivity.get_host_metrics(host_id, range=120)["metrics"]
     metrics_out = {}
     for met in metrics:
-        metrics_out[met["name"]] = met["data_points"][-1]
+        data_points = met.get("data_points", [])
+        metrics_out[met["name"]] = data_points[-1] if data_points else 0
 
     capacity = simplivity.get_host_capacity(host_id, range=120)["metrics"]
     capacity_out = {}
     for cap in capacity:
-        capacity_out[cap["name"]] = cap["data_points"][-1]
+        data_points = cap.get("data_points", [])
+        capacity_out[cap["name"]] = data_points[-1] if data_points else 0
+
+    hardware_info = simplivity.get_host_hardware_status(host_id).get("host")
+
+    healthy = True
+    for ld in hardware_info.get("logical_drives", []):
+        healthy &= ld.get("status") == "GREEN"
+        healthy &= ld.get("health") == "HEALTHY"
+
+        for ds in ld.get("drive_sets", []):
+            healthy &= ds.get("status") == "GREEN"
+            healthy &= ds.get("health") == "HEALTHY"
+
+            for disk in ds.get("physical_drives", []):
+                healthy &= disk.get("status") == "GREEN"
+                healthy &= disk.get("health") == "HEALTHY"
+
+    hardware_status = {
+        "host_status": hardware_info.get("status", "UNKNOWN"),
+        "raid_status": hardware_info.get("raid_card", {}).get("status", "UNKNOWN"),
+        "disk_status": "GREEN" if healthy else "RED",
+    }
 
     out_hosts[name] = {
         "name": name,
@@ -220,6 +327,7 @@ for hosts in simplivity.get_hosts()["hosts"]:
         "virtual_controller_name": virtual_controller_name,
         "metrics": metrics_out,
         "capacity": capacity_out,
+        "hardware": hardware_status,
     }
 
 print("<<<simplivity:sep(0)>>>")
